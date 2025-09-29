@@ -60,7 +60,7 @@ public final class JSObject {
     }
   }
 
-  public interface Invoker {
+  public interface  Invoker {
     Object invoke(Object receiver, Object... args);
   }
 
