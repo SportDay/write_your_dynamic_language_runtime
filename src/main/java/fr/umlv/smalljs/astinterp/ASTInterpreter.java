@@ -149,16 +149,54 @@ public final class ASTInterpreter {
         yield UNDEFINED;
       }
       case ObjectLiteral(Map<String, Expr> initMap, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO ObjectLiteral");
+        var newObj = JSObject.newObject(null);
+
+        initMap.forEach((key, value1) -> {
+          var value = visit(value1, env);
+          newObj.register(key, value);
+        });
+
+        yield newObj;
       }
       case FieldAccess(Expr receiver, String name, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO FieldAccess");
+        var value = visit(receiver, env);
+
+        var jsonObject = asJSObject(value, lineNumber);
+
+        var finalValue = jsonObject.lookupOrDefault(name, null);
+
+        if (finalValue == null) {
+          yield UNDEFINED;
+        }
+
+        yield finalValue;
       }
       case FieldAssignment(Expr receiver, String name, Expr expr, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO FieldAssignment");
+        var value = visit(receiver, env);
+
+        var jsonObject = asJSObject(value, lineNumber);
+
+        var newValue = visit(expr, env);
+
+        jsonObject.register(name, newValue);
+
+        yield jsonObject;
       }
       case MethodCall(Expr receiver, String name, List<Expr> args, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO MethodCall");
+        var value = visit(receiver, env);
+        var jsonObject = asJSObject(value, lineNumber);
+
+        var finalValue = jsonObject.lookupOrDefault(name, null);
+
+        if (finalValue == null) {
+          throw new Failure("at line " + lineNumber + ", type error " + name + " is not a method");
+        }
+
+        var valueAsObject = asJSObject(finalValue, lineNumber);
+
+        var arguments = args.stream().map(arg -> visit(arg, env)).toArray();
+
+        yield valueAsObject.invoke(jsonObject,arguments);
       }
     };
   }

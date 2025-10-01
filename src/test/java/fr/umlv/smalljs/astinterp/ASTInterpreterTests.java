@@ -359,7 +359,6 @@ public class ASTInterpreterTests {
               """));
     }
   }
-  /*
 
   @Nested
   public class Q13 {
@@ -541,5 +540,4 @@ public class ASTInterpreterTests {
                   """));
     }
   }
-  */
 }
