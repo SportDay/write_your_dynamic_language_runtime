@@ -2,7 +2,11 @@ package fr.umlv.smalljs.stackinterp;
 
 import static fr.umlv.smalljs.rt.JSObject.UNDEFINED;
 import static fr.umlv.smalljs.stackinterp.TagValues.decodeAnyValue;
+import static fr.umlv.smalljs.stackinterp.TagValues.decodeDictObject;
+import static fr.umlv.smalljs.stackinterp.TagValues.encodeAnyValue;
 import static fr.umlv.smalljs.stackinterp.TagValues.encodeDictObject;
+import static fr.umlv.smalljs.stackinterp.TagValues.encodeSmallInt;
+import static fr.umlv.smalljs.stackinterp.TagValues.isSmallInt;
 
 import java.io.PrintStream;
 import java.util.Arrays;
@@ -11,6 +15,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import fr.umlv.smalljs.ast.Script;
+import fr.umlv.smalljs.rt.Failure;
 import fr.umlv.smalljs.rt.JSObject;
 
 public final class StackInterpreter {
@@ -95,22 +100,26 @@ public final class StackInterpreter {
 		for (;;) {
 			switch (instrs[pc++]) {
 				case Instructions.CONST -> {
-					throw new UnsupportedOperationException("TODO CONST");
 					// get the constant from the instruction to the stack
-					// push(...)
-				}
+          var value = instrs[pc++];
+          // push(...)
+          push(stack, sp++, value);
+        }
 				case Instructions.LOOKUP -> {
-					throw new UnsupportedOperationException("TODO LOOKUP");
 					// find the current instruction
-					//int indexTagValue = ...
+					int indexTagValue = instrs[pc++];
 					// decode the name from the instruction
-					//String name = ...
+					String name = (String) decodeDictObject(indexTagValue, dict);
 					// lookup the name
-					// if it does not exist throw a failure
+          var lookup_name = globalEnv.lookupOrDefault(name, null);
+          // if it does not exist throw a failure
+          if (lookup_name == null) {
+            throw new Failure("unknown identifier " + name);
+          }
 					// otherwise push as any anyValue
-					//push(...);
+          push(stack, sp++, encodeAnyValue(lookup_name, dict));
 
-					//dumpStack("in lookup", stack, sp, bp, dict, heap);
+					dumpStack("in lookup", stack, sp, bp, dict, heap);
 				}
 				case Instructions.REGISTER -> {
 					throw new UnsupportedOperationException("TODO REGISTER");
@@ -133,13 +142,12 @@ public final class StackInterpreter {
 					//push(...);
 				}
 				case Instructions.STORE -> {
-					throw new UnsupportedOperationException("TODO STORE");
 					// get local offset
-					//int offset = ...
+					int offset = ...
 					// pop value from the stack
-					//var value = ...
+					var value = ...
 					// store it in the local slots
-					//store(...);
+					store(stack, bp++, offset, value);
 				}
 				case Instructions.DUP -> {
 					throw new UnsupportedOperationException("TODO DUP");
@@ -164,20 +172,18 @@ public final class StackInterpreter {
 					//push(...);
 				}
 				case Instructions.FUNCALL -> {
-					throw new UnsupportedOperationException("TODO FUNCALL");
 					// DEBUG
-					//dumpStack(">start funcall dump", stack, sp, bp, dict, heap);
-
+					dumpStack(">start funcall dump", stack, sp, bp, dict, heap);
 					// find argument count
-					//var argumentCount = ...
+					var argumentCount = instrs[pc++];
 					// find baseArg
-					//var baseArg = ...
+					var baseArg = sp - argumentCount;
 					// stack[baseArg] is the first argument
 					// stack[baseArg + RECEIVER_BASE_ARG_OFFSET] is the receiver
 					// stack[baseArg + QUALIFIER_BASE_ARG_OFFSET] is the qualifier (aka the function)
 
 					// decode qualifier
-					//var newFunction = (JSObject) ...
+					var newFunction = (JSObject) decodeAnyValue(stack[baseArg + QUALIFIER_BASE_ARG_OFFSET], dict, heap);
 					//{ // DEBUG
 					//	var receiver = decodeAnyValue(stack[baseArg + RECEIVER_BASE_ARG_OFFSET], dict, heap);
 					//	var args = new Object[argumentCount];
@@ -188,31 +194,30 @@ public final class StackInterpreter {
 					//}
 
 					// check if the function contains a code attribute
-					//var maybeCode = newFunction.lookupOrDefault("__code__", null);
-					//if (maybeCode == null) { // native call !
+					var maybeCode = newFunction.lookupOrDefault("__code__", null);
+					if (maybeCode == null) { // native call !
 					// decode receiver
-					//var receiver = decodeAnyValue(...);
-
+					var receiver = decodeAnyValue(stack[baseArg + RECEIVER_BASE_ARG_OFFSET], dict, heap);
 					  // decode arguments
-					  //var args = new Object[argumentCount];
-					  //for (var i = 0; i < argumentCount; i++) {
-					  //	args[i] = decodeAnyValue(...);
-					  //}
+					  var args = new Object[argumentCount];
+					  for (var i = 0; i < argumentCount; i++) {
+					  	args[i] = decodeAnyValue(stack[baseArg + i], dict, heap);
+					  }
 
-					  // System.err.println("call native " + newFunction.name() + " with " +
-					  // receiver + " " + java.util.Arrays.toString(args));
+					   System.err.println("call native " + newFunction.name() + " with " +
+					   receiver + " " + java.util.Arrays.toString(args));
 
 					  // call native function
-					  //var result = encodeAnyValue(newFunction.invoke(receiver, args), dict);
+					  var result = encodeAnyValue(newFunction.invoke(receiver, args), dict);
 
 					  // fixup sp (receiver and function must be dropped)
-					  //sp = ...
+					  sp = baseArg - FUNCALL_PREFIX;
 
 					  // push return value
-					  //push(...);
-					  //continue;
-					//}
-					//throw new UnsupportedOperationException("TODO FUNCALL");
+					  push(stack, sp++, result);
+					  continue;
+					}
+					throw new UnsupportedOperationException("TODO FUNCALL");
 
 					// initialize new code
 					//code = (Code) maybeCode;
@@ -248,37 +253,38 @@ public final class StackInterpreter {
 					// dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
 				}
 				case Instructions.RET -> {
-					throw new UnsupportedOperationException("TODO RET");
 					// DEBUG
-					//dumpStack("> start ret dump", stack, sp, bp, dict, heap);
+					dumpStack("> start ret dump", stack, sp, bp, dict, heap);
 
 					// get the return value from the top of the stack
-					//int result = ...
+					int result = pop(stack, --sp);
 
-					//System.err.println("ret " + decodeAnyValue(result, dict, heap));
+					System.err.println("ret " + decodeAnyValue(result, dict, heap));
 
 					// find activation and restore pc
-					//int activation = ...
-					//pc = ...
-					//if (pc == 0) {
-					// end of the interpreter
-					//	return decodeAnyValue(result, dict, heap);
-					//}
+					int activation =  bp + code.slotCount();
+					pc = stack[activation + PC_OFFSET];
+					if (pc == 0) {
+//					 end of the interpreter
+						return decodeAnyValue(result, dict, heap);
+					}
+
+          throw new UnsupportedOperationException("NYI");
 
 					// restore sp, function and bp
-					//sp = ...;
-					//function = (JSObject) ...;
-					//bp = ...;
+//					sp = ...;
+//					function = (JSObject) ...;
+//					bp = ...;
 
 					// restore code and instrs
-					//code = (Code) ...;
-					//instrs = code.instrs();
+//					code = (Code) ...;
+//					instrs = code.instrs();
 
 					// push return value
-					//push(...);
+//					push(...);
 
 					// DEBUG
-					// dumpStack("> end ret dump", stack, sp, bp, dict, heap);
+//					 dumpStack("> end ret dump", stack, sp, bp, dict, heap);
 				}
 				case Instructions.GOTO -> {
 					throw new UnsupportedOperationException("TODO GOTO");
@@ -380,17 +386,16 @@ public final class StackInterpreter {
 					//heap[...] = ...;
 				}
 				case Instructions.PRINT -> {
-					throw new UnsupportedOperationException("TODO PRINT");
 					// pop the value on top of the stack
-					//var result = ...;
+          var result = pop(stack, --sp);
 					// decode the value
-					//var value = decodeAnyValue(...);
+					var value = decodeAnyValue(result ,dict, heap);
 					// find "print" in the global environment
-					//var print = (JSObject) globalEnv.lookupOrDefault("print", null);
+					var print = (JSObject) globalEnv.lookupOrDefault("print", null);
 					// invoke it
-					//print.invoke(UNDEFINED, new Object[]{ value });
+					print.invoke(UNDEFINED, new Object[]{ value });
 					// push undefined on the stack
-					//push(...);
+					push(stack, sp++, undefined);
 				}
 				default -> throw new AssertionError("unknown instruction " + instrs[pc - 1]);
 			}
