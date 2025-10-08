@@ -133,28 +133,27 @@ public final class StackInterpreter {
 					// globalEnv.register(...);
 				}
 				case Instructions.LOAD -> {
-					throw new UnsupportedOperationException("TODO LOAD");
+//					throw new UnsupportedOperationException("TODO LOAD");
 					// get local offset
-					//int offset = ...
+          int offset = PC_OFFSET + instrs[pc++];
 					// load value from the local slots
-					//int value = ...
+					int value = load(heap, hp, offset);
 					// push it to the top of the stack
-					//push(...);
+					push(stack, sp++,  value);
 				}
 				case Instructions.STORE -> {
 					// get local offset
-					int offset = ...
+					int offset = PC_OFFSET + instrs[pc++];
 					// pop value from the stack
-					var value = ...
+					var value = pop(stack, --sp);
 					// store it in the local slots
-					store(stack, bp++, offset, value);
+					store(heap, hp, offset, value);
 				}
 				case Instructions.DUP -> {
-					throw new UnsupportedOperationException("TODO DUP");
 					// get value on top of the stack (without remove it)
-					//var value = ...
+					var value = stack[sp-1];
 					// push it on top of the stack
-					//push(...);
+					push(stack, sp++, value);
 				}
 				case Instructions.POP -> {
 					// adjust the stack pointer
