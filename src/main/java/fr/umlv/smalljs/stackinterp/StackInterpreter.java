@@ -1,11 +1,15 @@
 package fr.umlv.smalljs.stackinterp;
 
 import static fr.umlv.smalljs.rt.JSObject.UNDEFINED;
+import static fr.umlv.smalljs.stackinterp.TagValues.OBJECT_HEADER_SIZE;
 import static fr.umlv.smalljs.stackinterp.TagValues.decodeAnyValue;
 import static fr.umlv.smalljs.stackinterp.TagValues.decodeDictObject;
+import static fr.umlv.smalljs.stackinterp.TagValues.decodeReference;
 import static fr.umlv.smalljs.stackinterp.TagValues.encodeAnyValue;
 import static fr.umlv.smalljs.stackinterp.TagValues.encodeDictObject;
+import static fr.umlv.smalljs.stackinterp.TagValues.encodeReference;
 import static fr.umlv.smalljs.stackinterp.TagValues.encodeSmallInt;
+import static fr.umlv.smalljs.stackinterp.TagValues.isReference;
 import static fr.umlv.smalljs.stackinterp.TagValues.isSmallInt;
 
 import java.io.PrintStream;
@@ -122,36 +126,36 @@ public final class StackInterpreter {
 					dumpStack("in lookup", stack, sp, bp, dict, heap);
 				}
 				case Instructions.REGISTER -> {
-					throw new UnsupportedOperationException("TODO REGISTER");
+//					throw new UnsupportedOperationException("TODO REGISTER");
 					// find the current instruction
-					//int indexTagValue = ...
+					int indexTagValue = instrs[pc++];
 					// decode the name from the instructions
-					//String name = ...
+					String name = (String) decodeDictObject(indexTagValue, dict);
 					// pop the value from the stack and decode it
-					//Object value = ...
+					Object value = decodeAnyValue(pop(stack, --sp), dict, heap);
 					// register it in the global environment
-					// globalEnv.register(...);
+           globalEnv.register(name, value);
 				}
 				case Instructions.LOAD -> {
 //					throw new UnsupportedOperationException("TODO LOAD");
 					// get local offset
-          int offset = PC_OFFSET + instrs[pc++];
+          int offset = instrs[pc++];
 					// load value from the local slots
-					int value = load(heap, hp, offset);
+					int value = load(stack, bp, offset);
 					// push it to the top of the stack
 					push(stack, sp++,  value);
 				}
 				case Instructions.STORE -> {
 					// get local offset
-					int offset = PC_OFFSET + instrs[pc++];
+					int offset = instrs[pc++];
 					// pop value from the stack
 					var value = pop(stack, --sp);
 					// store it in the local slots
-					store(heap, hp, offset, value);
+					store(stack, bp, offset, value);
 				}
 				case Instructions.DUP -> {
 					// get value on top of the stack (without remove it)
-					var value = stack[sp-1];
+					var value = peek(stack, sp);
 					// push it on top of the stack
 					push(stack, sp++, value);
 				}
@@ -195,16 +199,17 @@ public final class StackInterpreter {
 					// check if the function contains a code attribute
 					var maybeCode = newFunction.lookupOrDefault("__code__", null);
 					if (maybeCode == null) { // native call !
-					// decode receiver
-					var receiver = decodeAnyValue(stack[baseArg + RECEIVER_BASE_ARG_OFFSET], dict, heap);
+					  // decode receiver
+					  var receiver = decodeAnyValue(stack[baseArg + RECEIVER_BASE_ARG_OFFSET], dict, heap);
 					  // decode arguments
 					  var args = new Object[argumentCount];
 					  for (var i = 0; i < argumentCount; i++) {
 					  	args[i] = decodeAnyValue(stack[baseArg + i], dict, heap);
 					  }
 
+
 					   System.err.println("call native " + newFunction.name() + " with " +
-					   receiver + " " + java.util.Arrays.toString(args));
+					   receiver + " " + Arrays.toString(args));
 
 					  // call native function
 					  var result = encodeAnyValue(newFunction.invoke(receiver, args), dict);
@@ -216,40 +221,39 @@ public final class StackInterpreter {
 					  push(stack, sp++, result);
 					  continue;
 					}
-					throw new UnsupportedOperationException("TODO FUNCALL");
+//					throw new UnsupportedOperationException("TODO FUNCALL");
 
 					// initialize new code
-					//code = (Code) maybeCode;
+					code = (Code) maybeCode;
 
 					// check number of arguments
-					//if (code.parameterCount() != argumentCount + 1/* this */) {
-					//	throw new Failure("wrong number of arguments for " + newFunction.name() + " expected "
-					//			+ (code.parameterCount() - 1) + " but was " + argumentCount);
-					//}
-
+					if (code.parameterCount() != argumentCount + 1/* this */) {
+						throw new Failure("wrong number of arguments for " + newFunction.name() + " expected "
+								+ (code.parameterCount() - 1) + " but was " + argumentCount);
+					}
 					// save bp/pc/code in activation zone
-					// stack[activation + offset] = ??
-					//var activation = ...;
-					//stack[activation + BP_OFFSET] = ...;
-					//stack[activation + PC_OFFSET] = ...;
-					//stack[activation + FUN_OFFSET] = ...;
+//          stack[activation + offset] = ??
+          var activation = baseArg - 1 + code.slotCount();
+					stack[activation + BP_OFFSET] = bp;
+					stack[activation + PC_OFFSET] = pc;
+					stack[activation + FUN_OFFSET] = encodeDictObject(function, dict);
 
 					// initialize pc, bp and sp
-					//pc = ...
-					//bp = ...
-					//sp = ...
+					pc = 0;
+					bp = baseArg - 1;
+					sp = activation + ACTIVATION_SIZE;
 
 					// initialize all locals that are not parameters
-					//for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
-					//	stack[i] = undefined;
-					//}
+					for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
+						stack[i] = undefined;
+					}
 
 					// initialize function and instrs of the new function
-					//function = newFunction;
-					//instrs = code.instrs();
+					function = newFunction;
+					instrs = code.instrs();
 
 					// DEBUG
-					// dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
+					 dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
 				}
 				case Instructions.RET -> {
 					// DEBUG
@@ -268,99 +272,102 @@ public final class StackInterpreter {
 						return decodeAnyValue(result, dict, heap);
 					}
 
-          throw new UnsupportedOperationException("NYI");
+//          throw new UnsupportedOperationException("NYI");
 
 					// restore sp, function and bp
-//					sp = ...;
-//					function = (JSObject) ...;
-//					bp = ...;
+					sp = bp - 1; /* Qualifier */
+					function = (JSObject) decodeDictObject(stack[activation + FUN_OFFSET], dict);
+					bp = stack[activation + BP_OFFSET];
 
 					// restore code and instrs
-//					code = (Code) ...;
-//					instrs = code.instrs();
+					code = (Code) function.lookupOrDefault("__code__",null);
+					instrs = code.instrs();
 
 					// push return value
-//					push(...);
+					push(stack, sp++, result);
 
 					// DEBUG
-//					 dumpStack("> end ret dump", stack, sp, bp, dict, heap);
+					 dumpStack("> end ret dump", stack, sp, bp, dict, heap);
 				}
 				case Instructions.GOTO -> {
-					throw new UnsupportedOperationException("TODO GOTO");
+//					throw new UnsupportedOperationException("TODO GOTO");
 					// get the label
-					//int label = ...
+					int label = instrs[pc];
 					// change the program counter to the label
-					//pc = ...
+					pc = label;
 				}
 				case Instructions.JUMP_IF_FALSE -> {
-					throw new UnsupportedOperationException("TODO JUMP_IF_FALSE");
+//					throw new UnsupportedOperationException("TODO JUMP_IF_FALSE");
 					// get the label
-					//var label = ...
+					var label = instrs[pc++];
 					// get the value on top of the stack
-					//var condition = ...
+					var condition = pop(stack, --sp);
 					// if condition is false change the program counter to the label
-					//if (condition == TagValues.FALSE) {
-					//	pc = label;
-					//}
+					if (condition == TagValues.FALSE) {
+						pc = label;
+					}
 				}
 				case Instructions.NEW -> {
-					throw new UnsupportedOperationException("TODO NEW");
+//					throw new UnsupportedOperationException("TODO NEW");
 					// get the class from the instructions
-					//var vClass = instrs[pc++];
-					//var clazz = (JSObject) ...;
+					var vClass = instrs[pc++];
+					var clazz = (JSObject) decodeDictObject(vClass, dict);
 
 					// out of memory ?
-					//if (hp + OBJECT_HEADER_SIZE + clazz.length() >= heap.length) {
-					//dumpHeap("before GC ", heap, hp, dict);
+					if (hp + OBJECT_HEADER_SIZE + clazz.length() >= heap.length) {
+					  dumpHeap("before GC ", heap, hp, dict);
 
-					//throw new UnsupportedOperationException("TODO !!! GC !!!")
+					  throw new UnsupportedOperationException("TODO !!! GC !!!");
+//					dumpHeap("after GC ", heap, hp, dict);
+					}
 
-					//dumpHeap("after GC ", heap, hp, dict);
-					//}
-
-					//var ref = hp;
+					var ref = hp;
 
 					// write the class on heap
-					//heap[ref] = ...
+					heap[ref] = vClass;
 					// write the empty GC mark
-					//heap[ref + GC_OFFSET] = GC_EMPTY;
+					heap[ref + GC_OFFSET] = GC_EMPTY;
 					// get all fields values from the stack and write them on heap
-					//var baseArg = ...;
-					//for (var i = 0; i < clazz.length(); i++) {
-					//	heap[ref + OBJECT_HEADER_SIZE + i] = stack[baseArg + i];
-					//}
+					var baseArg = sp - clazz.length();
+					for (var i = 0; i < clazz.length(); i++) {
+						heap[ref + OBJECT_HEADER_SIZE + i] = stack[baseArg + i];
+					}
 					// adjust stack pointer and heap pointer
-					//sp = ...
-					//hp += ...
+					sp = baseArg;
+					hp += OBJECT_HEADER_SIZE + clazz.length();
 
 					// push the reference on top of the stack
-					//push(...);
+					push(stack, sp++, encodeReference(ref));
 				}
 				case Instructions.GET -> {
-					throw new UnsupportedOperationException("TODO GET");
+//					throw new UnsupportedOperationException("TODO GET");
 					// get field name from the instructions
-					//var fieldName = (String) ...
+					var fieldName = (String) decodeDictObject(instrs[pc++], dict);
 
 					// get reference from the top of the stack
-					//int value = ...
-					//int ref = ...
+					int value = pop(stack, --sp);
+          if (!isReference(value)) {
+            throw new Failure("TOP OF THE STACK");
+          }
+
+					int ref = decodeReference(value);
 					// get class on heap from the reference
-					//int vClass = ...
+					int vClass = heap[ref];
 					// get JSObject from class
-					//var clazz = (JSObject) decodeDictObject(vClass, dict);
+					var clazz = (JSObject) decodeDictObject(vClass, dict);
 					// get field slot from JSObject
-					//var slot = ...
-					//if (slot == null) {
+					var slot = clazz.lookupOrDefault(fieldName, null);
+					if (slot == null) {
 					// no slot, push undefined
-					//	push(..);
-					//	continue;
-					//}
+						push(stack, sp++, undefined);
+						continue;
+					}
 					// get the field index
-					//int fieldIndex = ...
+					int fieldIndex = (int) slot;
 					// get field value
-					//int fieldValue = ...
+					int fieldValue = heap[ref + OBJECT_HEADER_SIZE + fieldIndex];
 					// push field value on top of the stack
-					//push(...);
+					push(stack, sp++, fieldValue);
 				}
 				case Instructions.PUT -> {
 					throw new UnsupportedOperationException("TODO PUT");

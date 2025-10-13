@@ -333,7 +333,6 @@ public class StackInterpreterInstrTests {
 			assertEquals("hello Bob\n", execute(new Code(instrs, 1, 2), dict));
 		}
 	}
-	/*
 
 	@Nested
 	public class Q9 {
@@ -350,6 +349,7 @@ public class StackInterpreterInstrTests {
 			assertEquals("undefined\n", execute(new Code(instrs, 1, 2), dict));
 		}
 	}
+
 
 	@Nested
 	public class Q10 {
@@ -798,6 +798,7 @@ public class StackInterpreterInstrTests {
 		}
 	}
 
+
 	@Nested
 	public class Q12 {
 		@Test
@@ -1168,6 +1169,7 @@ public class StackInterpreterInstrTests {
 					execute(new Code(instrs, 1, 2), dict));
 		}
 	}
+  	/*
 
 	@Nested
 	public class Q16 {
