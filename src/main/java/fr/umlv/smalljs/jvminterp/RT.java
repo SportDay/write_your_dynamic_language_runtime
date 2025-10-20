@@ -50,42 +50,53 @@ public final class RT {
   private static Object lookupOrFail(JSObject jsObject, String key) {
     var value = jsObject.lookupOrDefault(key, null);
     if (value == null) {
-      throw new Failure("no value for " + key);
+      throw new Failure(key + " is not defined");
     }
     return value;
   }
 
   public static CallSite bsm_lookup(Lookup lookup, String name, MethodType type, String variableName) {
-    throw new UnsupportedOperationException("TODO bsm_lookup");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
+    var globalEnv = classLoader.global();
     // get the LOOKUP_OR_FAIL method handle
+    var lookupOrFail = LOOKUP_OR_FAIL;
     // use the global environment as first argument and the variableName as second argument
+
+    //var target = lookupOrFail.bindTo(globalEnv).bindTo(variableName); => same as below
+    var target = MethodHandles.insertArguments(lookupOrFail, 0, globalEnv, variableName);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
-    throw new UnsupportedOperationException("TODO bsm_funcall");
     // get INVOKE method handle
+    var invoke = INVOKE;
     // make it accept an Object (not a JSObject) and objects as other parameters
+    var target = invoke.asType(type);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static Object bsm_fun(Lookup lookup, String name, Class<?> type, int funId) {
-    throw new UnsupportedOperationException("TODO bsm_fun");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
+//    throw new UnsupportedOperationException("TODO bsm_fun");
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
     // get the dictionary and get the Fun object corresponding to the id
+    var dict = classLoader.dictionary();
     // create the function using ByteCodeRewriter.createFunction(...)
+    var fun = dict.lookupAndClear(funId);
+    return ByteCodeRewriter.createFunction(fun.name(), fun.parameters(), fun.body(), classLoader.global());
   }
 
   public static CallSite bsm_register(Lookup lookup, String name, MethodType type, String functionName) {
-    throw new UnsupportedOperationException("TODO bsm_register");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
+//    throw new UnsupportedOperationException("TODO bsm_register");
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
+    var globalEnv = classLoader.global();
     //get the REGISTER method handle
+    var register = REGISTER;
     // use the global environment as first argument and the functionName as second argument
+    var target = MethodHandles.insertArguments(register, 0, globalEnv, functionName);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   @SuppressWarnings("unused")  // used by a method handle
