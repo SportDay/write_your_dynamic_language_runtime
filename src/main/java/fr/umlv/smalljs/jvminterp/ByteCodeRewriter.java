@@ -227,18 +227,35 @@ public final class ByteCodeRewriter {
         mv.visitInsn(ARETURN);
       }
       case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO If");
         // visit the condition
+        visit(condition, env, mv, dictionary);
         // generate an invokedynamic to transform an Object to a boolean using BSM_TRUTH
+        mv.visitInvokeDynamicInsn("truth", "(Ljava/lang/Object;)Z", BSM_TRUTH);
+        var ifFalseLabel = new Label();
+        mv.visitJumpInsn(IFEQ,ifFalseLabel);
         // visit the true block
+        visit(trueBlock, env, mv, dictionary);
+        var endLabel = new Label();
+        mv.visitJumpInsn(GOTO, endLabel);
         // visit the false block
+        mv.visitLabel(ifFalseLabel);
+        visit(falseBlock, env,mv,dictionary);
+        mv.visitLabel(endLabel);
       }
       case ObjectLiteral(Map<String, Expr> initMap, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO ObjectLiteral");
+//        throw new UnsupportedOperationException("TODO ObjectLiteral");
         // call newObject with an INVOKESTATIC
+        mv.visitInsn(ACONST_NULL);
+        mv.visitMethodInsn(INVOKESTATIC, JSOBJECT, "newObject", "(L" + JSOBJECT + ";)L" + JSOBJECT + ";", false);
         // for each initialization expression
-        // generate a string with the key
-        // call register on the JSObject
+        initMap.forEach((s, expr) -> {
+          mv.visitInsn(DUP);
+          // generate a string with the key
+          mv.visitLdcInsn(s);
+          // call register on the JSObject
+          visit(expr, env, mv, dictionary);
+          mv.visitMethodInsn(INVOKEVIRTUAL, JSOBJECT, "register", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+        });
       }
       case FieldAccess(Expr receiver, String name, int lineNumber) -> {
         throw new UnsupportedOperationException("TODO FieldAccess");

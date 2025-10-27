@@ -3,9 +3,6 @@ package fr.umlv.smalljs.jvminterp;
 import static fr.umlv.smalljs.rt.JSObject.UNDEFINED;
 import static java.lang.invoke.MethodHandles.dropArguments;
 import static java.lang.invoke.MethodHandles.foldArguments;
-import static java.lang.invoke.MethodHandles.guardWithTest;
-import static java.lang.invoke.MethodHandles.insertArguments;
-import static java.lang.invoke.MethodHandles.invoker;
 import static java.lang.invoke.MethodType.methodType;
 
 import java.lang.invoke.CallSite;
@@ -68,13 +65,82 @@ public final class RT {
     return new ConstantCallSite(target);
   }
 
-  public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
+/*  public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
     // get INVOKE method handle
     var invoke = INVOKE;
     // make it accept an Object (not a JSObject) and objects as other parameters
     var target = invoke.asType(type);
     // create a constant callsite
     return new ConstantCallSite(target);
+  }*/
+
+  public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
+    return new InliningCache(type, 0, null);
+  }
+
+  private static class InliningCache extends MutableCallSite {
+    private static final MethodHandle SLOW_PATH, TEST;
+    private static final int MAX_DEPTH = 3;
+
+    static {
+      var lookup = MethodHandles.lookup();
+      try {
+        SLOW_PATH = lookup.findVirtual(InliningCache.class, "slowPath", methodType(MethodHandle.class, Object.class, Object.class));
+        TEST = lookup.findStatic(InliningCache.class, "test", methodType(boolean.class, Object.class, Object.class));
+      } catch (NoSuchMethodException | IllegalAccessException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    private final int depth;
+    private final InliningCache root;
+
+    public InliningCache(MethodType type, int depth, InliningCache root) {
+      this.depth = depth;
+      super(type);
+      var target = foldArguments(MethodHandles.exactInvoker(type), SLOW_PATH.bindTo(this));
+      setTarget(target);
+      if (root == null) {
+        this.root = this;
+      } else {
+        this.root = root;
+      }
+    }
+
+    private MethodHandle slowPath(Object qualifier, Object receiver) {
+      var jsObject = (JSObject) qualifier;
+      var mh = jsObject.methodHandle();
+
+//      IO.println("type: " + type());
+//      IO.println("mh: " + mh);
+//      IO.println("mh isVarargsCollector: " + mh.isVarargsCollector());
+
+      if (!mh.isVarargsCollector() && type().parameterCount() != mh.type().parameterCount() + 1) {
+        throw new Failure("wrong number of arguments for " + (type().parameterCount() - 1) + " expected " + (mh.type().parameterCount() - 2));
+      }
+
+      var target = MethodHandles.dropArguments(mh, 0, Object.class);
+      target = target.withVarargs(mh.isVarargsCollector());
+      target = target.asType(type());
+
+      if (this.depth == MAX_DEPTH) {
+        System.err.println("bla ".repeat(MAX_DEPTH));
+        root.setTarget(INVOKE.asType(type()));
+        return target;
+      }
+
+      var test = MethodHandles.insertArguments(TEST, 1, jsObject);
+      var fallBack = new InliningCache(type(), depth + 1, root).dynamicInvoker();
+      var guard = MethodHandles.guardWithTest(test, target, fallBack);
+
+      setTarget(guard);
+      return target;
+    }
+
+    private static boolean test(Object qualifier, Object expected) {
+      return qualifier == expected;
+    }
+
   }
 
   public static Object bsm_fun(Lookup lookup, String name, Class<?> type, int funId) {
@@ -104,9 +170,11 @@ public final class RT {
     return o != null && o != UNDEFINED && o != Boolean.FALSE;
   }
   public static CallSite bsm_truth(Lookup lookup, String name, MethodType type) {
-    throw new UnsupportedOperationException("TODO bsm_truth");
+//    throw new UnsupportedOperationException("TODO bsm_truth");
     // get the TRUTH method handle
+    var target = TRUTH;
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static CallSite bsm_get(Lookup lookup, String name, MethodType type, String fieldName) {
