@@ -129,6 +129,7 @@ public final class ByteCodeRewriter {
   private static final Handle BSM_GET = bsm("bsm_get", CallSite.class, Lookup.class, String.class, MethodType.class, String.class);
   private static final Handle BSM_SET = bsm("bsm_set", CallSite.class, Lookup.class, String.class, MethodType.class, String.class);
   private static final Handle BSM_METHODCALL = bsm("bsm_methodcall", CallSite.class, Lookup.class, String.class, MethodType.class);
+  private static final Handle BSM_GLOBALCALL = bsm("bsm_globalcall", CallSite.class, Lookup.class, String.class, MethodType.class, String.class);
 
   private static void visit(Expr expression, JSObject env, MethodVisitor mv, FunDictionary dictionary) {
     switch(expression) {
@@ -152,8 +153,6 @@ public final class ByteCodeRewriter {
         // does not support Integer (but supports int)
         var constant = new ConstantDynamic("const i integer", "Ljava/lang/Object;", BSM_CONST, integer);
         mv.visitLdcInsn(constant);
-
-
       }
       case Literal(String s, int lineNumber) -> {
         // use visitLDCInstr because the JVM natively supports strings
@@ -165,10 +164,24 @@ public final class ByteCodeRewriter {
         mv.visitLdcInsn(constant);
       }
       case Call(Expr qualifier, List<Expr> args, int lineNumber) -> {
-        // visit the qualifier
-        visit(qualifier, env, mv, dictionary);
         // load "this"
         var undefined = new ConstantDynamic("undefined", "Ljava/lang/Object;", BSM_UNDEFINED);
+        if (qualifier instanceof Identifier identifier && env.lookupOrDefault(identifier.name(), null) == null) {
+          // generate an invokedynamic
+          mv.visitLdcInsn(undefined);
+
+          // for each argument, visit it
+          for (var arg : args) {
+            visit(arg, env, mv, dictionary);
+          }
+          // generate an invokedynamic
+          var desc = "(" + "Ljava/lang/Object;".repeat(args.size() + 1) + ")Ljava/lang/Object;";
+          mv.visitInvokeDynamicInsn("globalcall", desc, BSM_GLOBALCALL, identifier.name());
+          return;
+        }
+
+        // visit the qualifier
+        visit(qualifier, env, mv, dictionary);
         mv.visitLdcInsn(undefined);
         // for each argument, visit it
         for (var arg : args) {
@@ -262,7 +275,7 @@ public final class ByteCodeRewriter {
         // visit the receiver
         visit(receiver, env, mv, dictionary);
         // generate an invokedynamic that goes a get through BSM_GET
-        mv.visitInvokeDynamicInsn(name,"(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET, name);
+        mv.visitInvokeDynamicInsn("get","(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET, name);
       }
       case FieldAssignment(Expr receiver, String name, Expr expr, int lineNumber) -> {
 //        throw new UnsupportedOperationException("TODO FieldAssignment");
@@ -270,14 +283,20 @@ public final class ByteCodeRewriter {
         visit(receiver, env, mv, dictionary);
         // visit the expression
         visit(expr, env, mv, dictionary);
-        mv.visitInvokeDynamicInsn(name,"(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_SET, name);
+        mv.visitInvokeDynamicInsn("set","(Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET, name);
       }
       case MethodCall(Expr receiver, String name, List<Expr> args, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO MethodCall");
+//        throw new UnsupportedOperationException("TODO MethodCall");
         // visit the receiver
+        visit(receiver, env, mv, dictionary);
         // for each argument
+        for (var arg : args) {
         // visit the argument
+          visit(arg, env, mv, dictionary);
+        }
         // generate an invokedynamic that call BSM_METHODCALL
+        var desc = "(" + "Ljava/lang/Object;".repeat(args.size() + 1) + ")Ljava/lang/Object;";
+        mv.visitInvokeDynamicInsn(name, desc, BSM_METHODCALL);
       }
     }
   }
