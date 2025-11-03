@@ -178,19 +178,27 @@ public final class RT {
   }
 
   public static CallSite bsm_get(Lookup lookup, String name, MethodType type, String fieldName) {
-    throw new UnsupportedOperationException("TODO bsm_get");
+//    throw new UnsupportedOperationException("TODO bsm_get");
     // get the LOOKUP_OR_DEFAULT method handle
+    var lookup_or_default = LOOKUP_OR_DEFAULT;
     // use the fieldName and UNDEFINED as second argument and third argument
+    var target = MethodHandles.insertArguments(lookup_or_default, 1, fieldName, UNDEFINED);
     // make it accept an Object (not a JSObject) as first parameter
+    target = target.asType(type);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static CallSite bsm_set(Lookup lookup, String name, MethodType type, String fieldName) {
-    throw new UnsupportedOperationException("TODO bsm_set");
+//    throw new UnsupportedOperationException("TODO bsm_set");
     // get the REGISTER method handle
+    var register = REGISTER;
     // use the fieldName as second argument
+    var target = MethodHandles.insertArguments(register, 1, fieldName);
     // make it accept an Object (not a JSObject) as first parameter
+    target = target.asType(type);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   @SuppressWarnings("unused")  // used by a method handle
